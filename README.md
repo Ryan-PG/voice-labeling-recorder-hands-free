@@ -21,7 +21,7 @@ This is a simple **hands-free voice recording app** built with **Python** and **
 Ensure you have **Python 3.7+** installed on your system. Then install dependencies:
 
 ```sh
-pip install streamlit sounddevice numpy keyboard
+pip install -r requirements.txt
 ```
 
 ## Usage
