@@ -1,119 +1,253 @@
-import sounddevice as sd
-import numpy as np
-import wave
-import time
-import streamlit as st
-import threading
-import keyboard
+import sys
 import os
+import time
+import wave
+import pyaudio
+from PyQt5 import QtWidgets, QtCore
 
-"""
-# Voice Recorder App
 
-## How to Use:
-- **Press the Space Key** to start recording.
-- The timer on the UI will show the elapsed time.
-- **Press the Space Key again** to stop recording.
-- **Press the Delete Key while recording** to discard the current recording.
-- **Press the Delete Key after stopping** to remove the last saved recording.
-- The recorded audio file will be saved automatically in the `recordings` folder.
-- Files are saved sequentially as `recording_1.wav`, `recording_2.wav`, etc.
+CHUNK = 1024
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+RATE = 44100
 
-## Features:
-- Hands-free recording using the Space key.
-- Real-time timer display.
-- Automatic file saving with sequential numbering.
-- Delete functionality for both active and saved recordings.
+class AudioRecorder(QtCore.QThread):
+    """
+    A QThread that records audio from the specified input device.
+    """
+    def __init__(self, device_index, parent=None):
+        super(AudioRecorder, self).__init__(parent)
+        self.device_index = device_index
+        self._running = True
+        self.frames = []
 
-"""
+    def run(self):
+        pa = pyaudio.PyAudio()
+        try:
+            stream = pa.open(format=FORMAT,
+                             channels=CHANNELS,
+                             rate=RATE,
+                             input=True,
+                             frames_per_buffer=CHUNK,
+                             input_device_index=self.device_index)
+        except Exception as e:
+            print("Error opening audio stream:", e)
+            return
 
-samplerate = 44100  # Sample rate
-channels = 2  # Number of channels
-recording = []
-recording_flag = False
-start_time = None
-elapsed_time = 0
-last_saved_filename = None
+        while self._running:
+            try:
+                data = stream.read(CHUNK, exception_on_overflow=False)
+            except Exception as e:
+                print("Error during recording:", e)
+                break
+            self.frames.append(data)
 
-def callback(indata, frames, time, status):
-    global recording_flag, recording
-    if recording_flag:
-        recording.append(indata.copy())
+        stream.stop_stream()
+        stream.close()
+        pa.terminate()
 
-def record_audio(timer_placeholder):
-    global recording_flag, recording, start_time, elapsed_time
-    recording = []
-    recording_flag = True
-    start_time = time.time()
-    with sd.InputStream(samplerate=samplerate, channels=channels, callback=callback):
-        while recording_flag:
-            elapsed_time = int(time.time() - start_time)
-            timer_placeholder.write(f"Recording Time: {elapsed_time} seconds")
-            time.sleep(1)
+    def stop(self):
+        self._running = False
 
-def stop_recording(timer_placeholder):
-    global recording_flag, last_saved_filename
-    recording_flag = False
-    if recording:
-        last_saved_filename = save_audio()
-    else:
-        st.warning("No audio recorded. Recording was stopped before capturing any data.")
-    timer_placeholder.write("Recording stopped.")
+class MainWindow(QtWidgets.QMainWindow):
+    """
+    Main application window for the Voice Recorder.
+    """
+    def __init__(self, device_index):
+        super(MainWindow, self).__init__()
+        self.device_index = device_index
 
-def get_next_filename():
-    save_dir = "recordings"
-    os.makedirs(save_dir, exist_ok=True)
-    existing_files = [f for f in os.listdir(save_dir) if f.startswith("recording_") and f.endswith(".wav")]
-    existing_numbers = [int(f.split("_")[1].split(".")[0]) for f in existing_files if f.split("_")[1].split(".")[0].isdigit()]
-    next_number = max(existing_numbers) + 1 if existing_numbers else 1
-    return os.path.join(save_dir, f"recording_{next_number}.wav")
+        self.setWindowTitle("Voice Recorder")
+        self.resize(400, 200)
+        self.central_widget = QtWidgets.QWidget()
+        self.setCentralWidget(self.central_widget)
 
-def save_audio():
-    if not recording:
-        st.warning("No audio data to save.")
-        return None
-    audio_data = np.concatenate(recording, axis=0)
-    filename = get_next_filename()
-    with wave.open(filename, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(2)  # 16-bit audio
-        wf.setframerate(samplerate)
-        wf.writeframes((audio_data * 32767).astype(np.int16).tobytes())
-    st.success(f"Recording saved as {filename}")
-    return filename
+        
+        self.layout = QtWidgets.QVBoxLayout(self.central_widget)
+        self.instruction_label = QtWidgets.QLabel(
+            "Instructions:\n"
+            "- Press the Space Key to start recording.\n"
+            "- The timer shows elapsed time.\n"
+            "- Press Space again to stop recording.\n"
+            "- Press Delete while recording to discard.\n"
+            "- Press Delete after stopping to delete the last recording."
+        )
+        self.instruction_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.layout.addWidget(self.instruction_label)
 
-def delete_last_recording():
-    global last_saved_filename
-    if last_saved_filename and os.path.exists(last_saved_filename):
-        os.remove(last_saved_filename)
-        st.warning(f"Deleted last recording: {last_saved_filename}")
-        last_saved_filename = None
-    else:
-        st.warning("No recording found to delete.")
+        self.timer_label = QtWidgets.QLabel("")
+        self.timer_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.layout.addWidget(self.timer_label)
 
-def keyboard_listener(timer_placeholder):
-    global recording_flag, start_time, elapsed_time, recording
-    while True:
-        event = keyboard.read_event(suppress=True)
-        if event.event_type == "down":
-            if event.name == "space":
-                if not recording_flag:
-                    threading.Thread(target=record_audio, args=(timer_placeholder,), daemon=True).start()
-                else:
-                    stop_recording(timer_placeholder)
-            elif event.name == "delete":
-                if recording_flag:
-                    recording.clear()  # Discard current recording
-                    recording_flag = False
-                    timer_placeholder.write("Recording discarded.")
-                else:
-                    delete_last_recording()
+        
+        self.timer = QtCore.QTimer(self)
+        self.timer.setInterval(100)  
+        self.timer.timeout.connect(self.update_timer)
+
+        
+        self.recording = False
+        self.recorder = None
+        self.recording_start_time = None
+        self.recording_count = self.get_initial_recording_count()
+
+        
+        if not os.path.exists("recordings"):
+            os.makedirs("recordings")
+
+        
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+
+    def get_initial_recording_count(self):
+        """
+        Checks the 'recordings' folder for existing files to continue numbering.
+        """
+        count = 0
+        if os.path.exists("recordings"):
+            for filename in os.listdir("recordings"):
+                if filename.startswith("recording_") and filename.endswith(".wav"):
+                    try:
+                        num = int(filename[len("recording_"):-len(".wav")])
+                        if num > count:
+                            count = num
+                    except:
+                        continue
+        return count
+
+    def keyPressEvent(self, event):
+        """
+        Handle Space and Delete key presses:
+          - Space: start/stop recording.
+          - Delete: discard current recording (if recording) or delete last saved recording.
+        """
+        key = event.key()
+        if key == QtCore.Qt.Key_Space:
+            if not self.recording:
+                self.start_recording()
+            else:
+                self.stop_recording(save=True)
+        elif key == QtCore.Qt.Key_Delete:
+            if self.recording:
+                self.stop_recording(save=False)
+            else:
+                self.delete_last_recording()
+        else:
+            super(MainWindow, self).keyPressEvent(event)
+
+    def start_recording(self):
+        """Starts a new recording session using the selected input device."""
+        self.recorder = AudioRecorder(self.device_index)
+        self.recorder.start()
+        self.recording_start_time = time.time()
+        self.timer.start()
+        self.recording = True
+        self.instruction_label.setText("Recording... Press Space to stop, Delete to discard.")
+
+    def stop_recording(self, save=True):
+        """
+        Stops the current recording. If 'save' is True, the recording is saved;
+        otherwise, it is discarded.
+        """
+        if self.recorder is not None:
+            self.recorder.stop()
+            self.recorder.wait()  
+            self.timer.stop()
+
+            if save:
+                self.recording_count += 1
+                filename = os.path.join("recordings", f"recording_{self.recording_count}.wav")
+                try:
+                    wf = wave.open(filename, 'wb')
+                    wf.setnchannels(CHANNELS)
+                    pa = pyaudio.PyAudio()
+                    wf.setsampwidth(pa.get_sample_size(FORMAT))
+                    pa.terminate()
+                    wf.setframerate(RATE)
+                    wf.writeframes(b''.join(self.recorder.frames))
+                    wf.close()
+                    self.instruction_label.setText(
+                        f"Recording saved:\n{filename}\n\nPress Space to record again,\nor Delete to remove the last recording."
+                    )
+                except Exception as e:
+                    self.instruction_label.setText(f"Error saving recording:\n{str(e)}")
+            else:
+                self.instruction_label.setText("Recording discarded.\nPress Space to record again.")
+
+            self.recorder = None
+            self.recording = False
+            self.timer_label.setText("")
+
+    def delete_last_recording(self):
+        """Deletes the last saved recording file (if any)."""
+        if self.recording_count > 0:
+            filename = os.path.join("recordings", f"recording_{self.recording_count}.wav")
+            if os.path.exists(filename):
+                try:
+                    os.remove(filename)
+                    self.instruction_label.setText(f"Deleted last recording:\n{filename}\nPress Space to record again.")
+                    self.recording_count -= 1
+                except Exception as e:
+                    self.instruction_label.setText(f"Error deleting file:\n{filename}\n{str(e)}")
+            else:
+                self.instruction_label.setText("No recording file found to delete.")
+        else:
+            self.instruction_label.setText("No recordings to delete.")
+
+    def update_timer(self):
+        """Updates the timer label with the elapsed recording time."""
+        elapsed = time.time() - self.recording_start_time
+        mins, secs = divmod(int(elapsed), 60)
+        millis = int((elapsed - int(elapsed)) * 1000)
+        self.timer_label.setText(f"Elapsed Time: {mins:02d}:{secs:02d}.{millis:03d}")
+
+class DeviceSelectionDialog(QtWidgets.QDialog):
+    """
+    A dialog that lists available input devices so the user can select one.
+    """
+    def __init__(self, parent=None):
+        super(DeviceSelectionDialog, self).__init__(parent)
+        self.setWindowTitle("Select Input Device")
+        self.layout = QtWidgets.QVBoxLayout(self)
+
+        self.layout.addWidget(QtWidgets.QLabel("Select Audio Input Device:"))
+        self.device_combo = QtWidgets.QComboBox(self)
+        self.populate_devices()
+        self.layout.addWidget(self.device_combo)
+
+        
+        buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
+        buttonBox.accepted.connect(self.accept)
+        buttonBox.rejected.connect(self.reject)
+        self.layout.addWidget(buttonBox)
+
+    def populate_devices(self):
+        """
+        Populates the combo box with all available input devices.
+        """
+        self.pa = pyaudio.PyAudio()
+        for i in range(self.pa.get_device_count()):
+            info = self.pa.get_device_info_by_index(i)
+            if info.get('maxInputChannels', 0) > 0:
+                display_text = f"{info['name']} (Index {i})"
+                self.device_combo.addItem(display_text, i)
+
+    def get_selected_device_index(self):
+        """Returns the device index of the currently selected input device."""
+        return self.device_combo.currentData()
 
 def main():
-    global elapsed_time, recording_flag
-    st.title("Voice Recorder App")
-    timer_placeholder = st.empty()
-    threading.Thread(target=keyboard_listener, args=(timer_placeholder,), daemon=True).start()
+    app = QtWidgets.QApplication(sys.argv)
 
-if __name__ == "__main__":
+    
+    deviceDialog = DeviceSelectionDialog()
+    if deviceDialog.exec_() == QtWidgets.QDialog.Accepted:
+        device_index = deviceDialog.get_selected_device_index()
+    else:
+        sys.exit(0)  
+
+    
+    window = MainWindow(device_index)
+    window.show()
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
     main()
