@@ -45,7 +45,7 @@ Or, if you downloaded the executable:
 ```
 
 ### Option 2: Download and Use Pre-built Executable
-You can download the built version of this application (`labeling-voice-recorder.exe`) from the `dist/` folder or directly from [this link](https://github.com/Ryan-PG/voice-labeling-recorder-hands-free.git/dist/./dist/labeling-voice-recorder.exe). Simply double-click the executable to run the application without needing to install Python or any dependencies.
+You can download the built version of this application (`labeling-voice-recorder.exe`) from the `dist/` folder or directly from [this link](https://github.com/Ryan-PG/voice-labeling-recorder-hands-free/tree/main/dist/labeling-voice-recorder.exe). Simply double-click the executable to run the application without needing to install Python or any dependencies.
 
 ### Keyboard Shortcuts
 - **`Space`**: Start/Stop recording.
