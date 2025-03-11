@@ -68,6 +68,9 @@ You can download the built version of this application (`labeling-voice-recorder
    - Saved recordings are stored in a `recordings/` folder as `recording_1.wav`, `recording_2.wav`, etc.
    - Press `Delete` after recording to remove the last saved file.
 
+* After all previous steps, you can run `labeling-csv.py` to create `segments_info.csv` for you texts and voices.
+
+
 ## Building the Application
 
 If you want to build your own executable version of this application, you can use the following command:
