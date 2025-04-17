@@ -12,6 +12,10 @@ This is a simple voice recording application built using Python, PyQt5 for the G
 - **Automatic File Naming**: Saves recordings in a `recordings/` folder with sequential numbering.
 - **Error Handling**: Detects input device issues and file operations safely.
 
+## Application Interface
+
+![Application UI Interface](demo.png)
+
 ## Installation
 
 ### Option 1: Install from Source
@@ -45,9 +49,11 @@ Or, if you downloaded the executable:
 ```
 
 ### Option 2: Download and Use Pre-built Executable
+
 You can download the built version of this application (`labeling-voice-recorder.exe`) from the `dist/` folder or directly from [this link](https://github.com/Ryan-PG/voice-labeling-recorder-hands-free/tree/main/dist/labeling-voice-recorder.exe). Simply double-click the executable to run the application without needing to install Python or any dependencies.
 
 ### Keyboard Shortcuts
+
 - **`Space`**: Start/Stop recording.
 - **`Delete` (while recording)**: Discard the current recording.
 - **`Delete` (after recording)**: Delete the last saved recording.
@@ -55,10 +61,12 @@ You can download the built version of this application (`labeling-voice-recorder
 ## How It Works
 
 1. **Device Selection**
+
    - On startup, a dialog appears listing available audio input devices.
    - Select a device and click `OK` to proceed.
 
 2. **Recording**
+
    - Press `Space` to start recording.
    - The app shows the elapsed recording time.
    - Press `Space` again to stop and save the recording.
@@ -68,8 +76,7 @@ You can download the built version of this application (`labeling-voice-recorder
    - Saved recordings are stored in a `recordings/` folder as `recording_1.wav`, `recording_2.wav`, etc.
    - Press `Delete` after recording to remove the last saved file.
 
-* After all previous steps, you can run `labeling-csv.py` to create `segments_info.csv` for you texts and voices.
-
+- After all previous steps, you can run `labeling-csv.py` to create `segments_info.csv` for you texts and voices.
 
 ## Building the Application
 
@@ -95,6 +102,7 @@ voice-recorder/
 ## Troubleshooting
 
 - **No input devices detected?**
+
   - Ensure your microphone is connected and recognized by the system.
   - Try running `python -m pyaudio` to check available devices.
 
@@ -112,4 +120,3 @@ This project is open-source and available under the MIT License.
 ---
 
 Feel free to contribute or modify the code as needed!
-
